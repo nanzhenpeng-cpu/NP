@@ -14,7 +14,6 @@ EXCEL_PATH = Path(__file__).parent / "手机线否词 (1).xlsx"
 
 @st.cache_data(show_spinner=False)
 def load_data(path):
-    # Sheet 名称已修正为“否定”
     df_apple = pd.read_excel(path, sheet_name="苹果机型否定", header=0)
     df_android = pd.read_excel(path, sheet_name="安卓机型否定", header=0)
     return df_apple, df_android
@@ -146,32 +145,55 @@ plain_keywords = sorted(common_neg_words)
 display_text = "\n".join(display_lines)
 plain_text = "\n".join(plain_keywords)
 
-# ========== 展示结果（复制按钮移到关键词列表上方） ==========
-st.subheader(f"📋 共 {len(plain_keywords)} 个词组否定词")
+# ========== 展示结果：计数 + 复制按钮（卡通护眼风） + 关键词列表 ==========
+st.subheader(f"📋 共 {len(plain_keywords)} 个否定词")
 
-# ---- 复制按钮（放在这里，方便直接复制） ----
-def copy_button(text_to_copy, button_label, success_msg="已复制到剪贴板！"):
+# ---- 卡通护眼复制按钮（使用 event.target，避免 ID 冲突）----
+def copy_button(text_to_copy, button_label, success_msg="已复制✨"):
     escaped_text = text_to_copy.replace("`", "\\`").replace("$", "\\$")
+    # 可爱护眼样式：薄荷绿背景，圆润胶囊形状，emoji 点缀
+    style = """
+        padding: 10px 22px;
+        background: #A8E6CF;          /* 薄荷绿 */
+        color: #2D6A4F;               /* 深绿文字 */
+        border: 2px solid #7BC8A4;
+        border-radius: 30px;          /* 大圆角，胶囊感 */
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        transition: all 0.2s ease;
+        margin-right: 10px;
+        margin-bottom: 10px;
+    """
+    hover_style = """
+        background: #C8F0DE;
+        border-color: #5DAB8A;
+        box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+        transform: scale(1.02);
+    """
     components.html(f"""
-    <div style="margin: 10px 0;">
-        <button onclick="
-            navigator.clipboard.writeText(`{escaped_text}`).then(function() {{
-                var btn = document.getElementById('copy-btn');
+    <button
+        style="{style}"
+        onmouseover="this.style.background='#C8F0DE'; this.style.borderColor='#5DAB8A'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.12)'; this.style.transform='scale(1.02)';"
+        onmouseout="this.style.background='#A8E6CF'; this.style.borderColor='#7BC8A4'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.08)'; this.style.transform='scale(1)';"
+        onclick="
+            navigator.clipboard.writeText(`{escaped_text}`).then(() => {{
+                let btn = event.target;
                 btn.innerText = '{success_msg}';
-                setTimeout(function(){{ btn.innerText = '{button_label}'; }}, 2000);
-            }}).catch(function(err) {{
+                setTimeout(() => {{ btn.innerText = '{button_label}'; }}, 2000);
+            }}).catch(err => {{
                 alert('复制失败，请手动全选复制：' + err);
             }});
-        " id="copy-btn" style="padding:8px 16px; cursor:pointer; background:#FF4B4B; color:white; border:none; border-radius:4px;">
-            {button_label}
-        </button>
-    </div>
-    """, height=50)
+        "
+    >{button_label}</button>
+    """, height=60)
 
-copy_button(plain_text, "📋 复制纯关键词（每行一个）")
+# 生成按钮
+copy_button(plain_text, "📋 复制纯关键词")
 
 if any(word_remarks[w] for w in plain_keywords):
-    copy_button(display_text, "📋 复制关键词（含备注）", "已复制（含备注）")
+    copy_button(display_text, "📝 复制含备注版本")
 
 # ---- 关键词列表 ----
 st.code(display_text, language="")
