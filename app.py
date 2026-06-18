@@ -147,7 +147,7 @@ display_text = "\n".join(display_lines)
 plain_text = "\n".join(plain_keywords)
 
 # ========== 展示结果（复制按钮移到关键词列表上方） ==========
-st.subheader(f"📋 共 {len(plain_keywords)} 个否定词")
+st.subheader(f"📋 共 {len(plain_keywords)} 个词组否定词")
 
 # ---- 复制按钮（放在这里，方便直接复制） ----
 def copy_button(text_to_copy, button_label, success_msg="已复制到剪贴板！"):
