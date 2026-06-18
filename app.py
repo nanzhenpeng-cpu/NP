@@ -6,6 +6,29 @@ import streamlit.components.v1 as components
 
 # ========== 配置页面 ==========
 st.set_page_config(page_title="亚马逊否定词查询", page_icon="📱", layout="wide")
+
+# ========== 自定义 CSS：把多选标签改成护眼绿 ==========
+st.markdown("""
+<style>
+    /* 多选输入框内的小标签（已选机型） */
+    .stMultiSelect [data-baseweb="tag"] {
+        background-color: #A8E6CF !important;
+        border: 1px solid #7BC8A4 !important;
+        color: #2D6A4F !important;
+        border-radius: 20px !important;
+        font-weight: 500;
+    }
+    /* 标签里的叉号（移除按钮）颜色 */
+    .stMultiSelect [data-baseweb="tag"] span[data-baseweb="close-button"] {
+        color: #2D6A4F !important;
+    }
+    /* 下拉选中项的高亮背景 */
+    .stMultiSelect [role="option"][aria-selected="true"] {
+        background-color: #C8F0DE !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📱 手机线广告否定词查询")
 st.caption("数据来源：苹果机型否定 & 安卓机型否定")
 
@@ -119,7 +142,7 @@ for s in neg_sets[1:]:
     common_neg_words = common_neg_words.intersection(s)
 
 if not common_neg_words:
-    # 改用护眼绿提示框，替代原来的红色 st.warning
+    # 护眼绿提示框
     components.html("""
     <div style="
         background: #E8F8F0;
@@ -164,7 +187,6 @@ plain_text = "\n".join(plain_keywords)
 
 # ========== 展示结果：标题 + 按钮同一行（卡通护眼风） + 关键词列表 ==========
 
-# 准备按钮 HTML（可能1个或2个）
 button_html = ""
 btn_style = (
     "padding: 8px 18px; background: #A8E6CF; color: #2D6A4F; "
@@ -204,7 +226,6 @@ if any(word_remarks[w] for w in plain_keywords):
     button2 = make_button(display_text, "📝 复制含备注")
     buttons += button2
 
-# 整行布局：标题在左，按钮在右
 header_line = f"""
 <div style="display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px 0;">
     <div style="font-size: 22px; font-weight: 600; color: #333;">
@@ -217,8 +238,5 @@ header_line = f"""
 """
 
 components.html(header_line, height=60)
-
-# ---- 关键词列表 ----
 st.code(display_text, language="")
-
 st.caption("💡 列表中灰色小字为备注信息，点击复制纯关键词可直接用于广告后台。")
