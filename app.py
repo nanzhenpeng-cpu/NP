@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-import html
 import re
+import streamlit.components.v1 as components
 
 # ========== 配置页面 ==========
 st.set_page_config(page_title="亚马逊否定词查询", page_icon="📱", layout="wide")
@@ -14,7 +14,6 @@ EXCEL_PATH = Path(__file__).parent / "手机线否词 (1).xlsx"
 
 @st.cache_data(show_spinner=False)
 def load_data(path):
-    # 同时读取两个 sheet
     df_apple = pd.read_excel(path, sheet_name="苹果机型否定", header=0)
     df_android = pd.read_excel(path, sheet_name="安卓机型否定", header=0)
     return df_apple, df_android
@@ -28,49 +27,40 @@ except Exception as e:
 # ========== 解析数据，构建 机型 → 否定词 的映射 ==========
 def build_model_dict(df):
     """
-    返回字典:
+    返回:
     {
       "iphone17": {
-         "normal": ["关键词A", "关键词B"],
-         "手机膜共用不否": ["关键词C"],
-         ...
+         "normal": ["xiaomi", "ipad"],          # 纯 NP 的词
+         "special": {"手机膜共用不否": ["keyword1"], ...}  # 带备注的 NP
       },
       ...
     }
     """
     model_dict = {}
-    # 第一列是关键词，其余都是机型
     keywords = df.iloc[:, 0].dropna().astype(str).tolist()
-    model_columns = df.columns[1:]  # 机型列名
-    
+    model_columns = df.columns[1:]
+
     for col in model_columns:
         model_name = str(col).strip()
         if model_name not in model_dict:
-            model_dict[model_name] = {"normal": [], "special": {}}  # special 是 {备注: [词列表]}
+            model_dict[model_name] = {"normal": [], "special": {}}
         
         for idx, keyword in enumerate(keywords):
             cell_value = df.iloc[idx][col]
             if pd.isna(cell_value) or str(cell_value).strip() == "":
                 continue
-            
             cell_str = str(cell_value).strip()
-            # 判断是否为 NP 或 NP(备注)
+            
             if cell_str == "NP":
                 model_dict[model_name]["normal"].append(keyword)
             elif cell_str.startswith("NP(") or cell_str.startswith("NP（"):
-                # 提取括号内的备注
                 match = re.search(r'NP[（(](.+)[）)]', cell_str)
                 remark = match.group(1).strip() if match else "备注"
-                if remark not in model_dict[model_name]["special"]:
-                    model_dict[model_name]["special"][remark] = []
-                model_dict[model_name]["special"][remark].append(keyword)
-            else:
-                # 以防出现其他类似 NP 的值，按普通否定处理
-                if "NP" in cell_str.upper():
-                    model_dict[model_name]["normal"].append(keyword)
+                model_dict[model_name]["special"].setdefault(remark, []).append(keyword)
+            elif "NP" in cell_str.upper():  # 其他包含 NP 的都当普通否定词处理
+                model_dict[model_name]["normal"].append(keyword)
     return model_dict
 
-# 合并两个 sheet 的机型字典（同一机型出现多次，取并集）
 def merge_dicts(d1, d2):
     merged = {}
     for d in [d1, d2]:
@@ -80,7 +70,6 @@ def merge_dicts(d1, d2):
             merged[model]["normal"].extend(data["normal"])
             for remark, words in data["special"].items():
                 merged[model]["special"].setdefault(remark, []).extend(words)
-    # 去重
     for model in merged:
         merged[model]["normal"] = list(set(merged[model]["normal"]))
         for remark in merged[model]["special"]:
@@ -91,79 +80,99 @@ apple_dict = build_model_dict(df_apple)
 android_dict = build_model_dict(df_android)
 full_dict = merge_dicts(apple_dict, android_dict)
 
-# 所有机型列表（按字母排序）
 all_models = sorted(full_dict.keys())
 
 # ========== 界面：多选机型 ==========
 selected_models = st.multiselect(
-    "🔍 选择机型（可多选，支持联合筛选）：",
+    "🔍 选择机型（可多选，只有当所有选中机型都标记为 NP 时，该词才否定）：",
     options=all_models,
     default=None,
-    help="选择一个或多个机型，只要任一机型标记为 NP，该关键词就会展示"
 )
 
 if not selected_models:
     st.info("👆 请在上方选择至少一个机型")
     st.stop()
 
-# ========== 合并所选机型的否定词 ==========
-aggregated_normal = []
-aggregated_special = {}  # {备注: [词列表]}
+# ========== 新逻辑：全部机型都出现 NP 才算否定 ==========
+# 先收集所有选中机型中都出现的关键词（交集逻辑）
+# 将每个机型的所有否定词（normal+special）合并成一个集合，然后取交集
+def get_all_neg_words(model_name):
+    """返回该机型所有否定词的集合（不区分备注）"""
+    if model_name in full_dict:
+        data = full_dict[model_name]
+        normal = set(data["normal"])
+        special = set()
+        for words in data["special"].values():
+            special.update(words)
+        return normal.union(special)
+    return set()
 
-for model in selected_models:
-    if model in full_dict:
-        aggregated_normal.extend(full_dict[model]["normal"])
-        for remark, words in full_dict[model]["special"].items():
-            aggregated_special.setdefault(remark, []).extend(words)
+# 取所有选中机型否定词的交集
+neg_sets = [get_all_neg_words(m) for m in selected_models]
+common_neg_words = neg_sets[0]
+for s in neg_sets[1:]:
+    common_neg_words = common_neg_words.intersection(s)
 
-# 去重并排序
-aggregated_normal = sorted(set(aggregated_normal))
-for remark in aggregated_special:
-    aggregated_special[remark] = sorted(set(aggregated_special[remark]))
+if not common_neg_words:
+    st.warning("所选机型没有共同否定词（没有在所有机型中都标记为 NP 的关键词）。")
+    st.stop()
+
+# 现在需要知道这些交集词中有没有带备注的，以及对应的备注是什么
+# 遍历交集词，查询它们在各选中机型中的备注情况（只要在任意机型中出现过备注就保留备注）
+word_remarks = {}  # {keyword: set of remarks}
+for word in common_neg_words:
+    word_remarks[word] = set()
+    for m in selected_models:
+        if m in full_dict:
+            data = full_dict[m]
+            # 检查该词的备注
+            for remark, words in data["special"].items():
+                if word in words:
+                    word_remarks[word].add(remark)
+
+# 构建最终展示列表
+display_lines = []
+for word in sorted(common_neg_words):
+    if word_remarks[word]:
+        # 多个备注用逗号连接（比如极少情况）
+        remark_str = "、".join(sorted(word_remarks[word]))
+        display_lines.append(f"{word}  ( {remark_str} )")
+    else:
+        display_lines.append(word)
+
+plain_keywords = sorted(common_neg_words)  # 纯关键词，用于复制
+display_text = "\n".join(display_lines)
+plain_text = "\n".join(plain_keywords)
 
 # ========== 展示结果 ==========
-col1, col2 = st.columns(2)
+st.subheader(f"📋 共 {len(plain_keywords)} 个否定词")
+st.code(display_text, language="")
 
-with col1:
-    st.subheader("✅ 普通否定词")
-    if aggregated_normal:
-        normal_text = "\n".join(aggregated_normal)
-        st.code(normal_text, language="")
-        # 一键复制按钮（使用 HTML + JS）
-        st.markdown(
-            f"""<button onclick="navigator.clipboard.writeText(`{html.escape(normal_text)}`)">📋 复制普通否定词 ({len(aggregated_normal)}个)</button>""",
-            unsafe_allow_html=True
-        )
-    else:
-        st.write("无")
+# ========== 可靠的一键复制组件 ==========
+def copy_button(text_to_copy, button_label, success_msg="已复制到剪贴板！"):
+    """生成一个真正能用的复制按钮，使用组件注入 JS"""
+    escaped_text = text_to_copy.replace("`", "\\`").replace("$", "\\$")
+    components.html(f"""
+    <div style="margin: 10px 0;">
+        <button onclick="
+            navigator.clipboard.writeText(`{escaped_text}`).then(function() {{
+                var btn = document.getElementById('copy-btn');
+                btn.innerText = '{success_msg}';
+                setTimeout(function(){{ btn.innerText = '{button_label}'; }}, 2000);
+            }}).catch(function(err) {{
+                alert('复制失败，请手动全选复制：' + err);
+            }});
+        " id="copy-btn" style="padding:8px 16px; cursor:pointer; background:#FF4B4B; color:white; border:none; border-radius:4px;">
+            {button_label}
+        </button>
+    </div>
+    """, height=50)
 
-with col2:
-    st.subheader("⚠️ 特殊备注否定词")
-    if aggregated_special:
-        for remark, words in aggregated_special.items():
-            st.markdown(f"**{remark}**")
-            text = "\n".join(words)
-            st.code(text, language="")
-            st.markdown(
-                f"""<button onclick="navigator.clipboard.writeText(`{html.escape(text)}`)">📋 复制「{html.escape(remark)}」 ({len(words)}个)</button>""",
-                unsafe_allow_html=True
-            )
-    else:
-        st.write("无")
+# 复制纯关键词
+copy_button(plain_text, "📋 复制纯关键词（每行一个）")
 
-# 底部：复制全部否定词（普通+所有特殊）
-all_words = aggregated_normal.copy()
-for words in aggregated_special.values():
-    all_words.extend(words)
-all_words = sorted(set(all_words))
-all_text = "\n".join(all_words)
+# 如果存在带备注的词，额外提供一个带备注的版本复制
+if any(word_remarks[w] for w in plain_keywords):
+    copy_button(display_text, "📋 复制关键词（含备注）", "已复制（含备注）")
 
-st.divider()
-col_all, _ = st.columns([1, 3])
-with col_all:
-    st.subheader("📦 全部否定词（合并去重）")
-    st.code(all_text, language="")
-    st.markdown(
-        f"""<button onclick="navigator.clipboard.writeText(`{html.escape(all_text)}`)">📋 一键复制全部 ({len(all_words)}个)</button>""",
-        unsafe_allow_html=True
-    )
+st.caption("💡 列表中灰色小字为备注信息，点击复制纯关键词可直接用于广告后台。")
