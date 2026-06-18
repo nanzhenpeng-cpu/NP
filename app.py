@@ -119,7 +119,24 @@ for s in neg_sets[1:]:
     common_neg_words = common_neg_words.intersection(s)
 
 if not common_neg_words:
-    st.warning("所选机型没有共同否定词（没有在所有机型中都标记为 NP 的关键词）。")
+    # 改用护眼绿提示框，替代原来的红色 st.warning
+    components.html("""
+    <div style="
+        background: #E8F8F0;
+        border-left: 6px solid #7BC8A4;
+        padding: 16px 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+        color: #2D6A4F;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    ">
+        <span style="font-size:24px;">🌿</span>
+        <span>所选机型没有共同否定词（没有在所有机型中都标记为 NP 的关键词）。</span>
+    </div>
+    """, height=80)
     st.stop()
 
 # ========== 备注整理 ==========
@@ -145,55 +162,61 @@ plain_keywords = sorted(common_neg_words)
 display_text = "\n".join(display_lines)
 plain_text = "\n".join(plain_keywords)
 
-# ========== 展示结果：计数 + 复制按钮（卡通护眼风） + 关键词列表 ==========
-st.subheader(f"📋 共 {len(plain_keywords)} 个否定词")
+# ========== 展示结果：标题 + 按钮同一行（卡通护眼风） + 关键词列表 ==========
 
-# ---- 卡通护眼复制按钮（使用 event.target，避免 ID 冲突）----
-def copy_button(text_to_copy, button_label, success_msg="已复制✨"):
-    escaped_text = text_to_copy.replace("`", "\\`").replace("$", "\\$")
-    # 可爱护眼样式：薄荷绿背景，圆润胶囊形状，emoji 点缀
-    style = """
-        padding: 10px 22px;
-        background: #A8E6CF;          /* 薄荷绿 */
-        color: #2D6A4F;               /* 深绿文字 */
-        border: 2px solid #7BC8A4;
-        border-radius: 30px;          /* 大圆角，胶囊感 */
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-        transition: all 0.2s ease;
-        margin-right: 10px;
-        margin-bottom: 10px;
-    """
-    hover_style = """
-        background: #C8F0DE;
-        border-color: #5DAB8A;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.12);
-        transform: scale(1.02);
-    """
-    components.html(f"""
-    <button
-        style="{style}"
-        onmouseover="this.style.background='#C8F0DE'; this.style.borderColor='#5DAB8A'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.12)'; this.style.transform='scale(1.02)';"
-        onmouseout="this.style.background='#A8E6CF'; this.style.borderColor='#7BC8A4'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.08)'; this.style.transform='scale(1)';"
+# 准备按钮 HTML（可能1个或2个）
+button_html = ""
+btn_style = (
+    "padding: 8px 18px; background: #A8E6CF; color: #2D6A4F; "
+    "border: 2px solid #7BC8A4; border-radius: 30px; font-size: 15px; "
+    "font-weight: bold; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.06); "
+    "transition: all 0.2s ease; margin-left: 12px; white-space: nowrap;"
+)
+hover_on = (
+    "this.style.background='#C8F0DE'; this.style.borderColor='#5DAB8A'; "
+    "this.style.boxShadow='0 6px 12px rgba(0,0,0,0.1)'; this.style.transform='scale(1.02)';"
+)
+hover_off = (
+    "this.style.background='#A8E6CF'; this.style.borderColor='#7BC8A4'; "
+    "this.style.boxShadow='0 4px 8px rgba(0,0,0,0.06)'; this.style.transform='scale(1)';"
+)
+
+def make_button(text_to_copy, label, success="已复制✨"):
+    escaped = text_to_copy.replace("`", "\\`").replace("$", "\\$")
+    return f"""
+    <button style="{btn_style}"
+        onmouseover="{hover_on}"
+        onmouseout="{hover_off}"
         onclick="
-            navigator.clipboard.writeText(`{escaped_text}`).then(() => {{
+            navigator.clipboard.writeText(`{escaped}`).then(() => {{
                 let btn = event.target;
-                btn.innerText = '{success_msg}';
-                setTimeout(() => {{ btn.innerText = '{button_label}'; }}, 2000);
-            }}).catch(err => {{
-                alert('复制失败，请手动全选复制：' + err);
-            }});
+                let orig = '{label}';
+                btn.innerText = '{success}';
+                setTimeout(() => {{ btn.innerText = orig; }}, 2000);
+            }}).catch(err => alert('复制失败：' + err));
         "
-    >{button_label}</button>
-    """, height=60)
+    >{label}</button>
+    """
 
-# 生成按钮
-copy_button(plain_text, "📋 复制纯关键词")
-
+button1 = make_button(plain_text, "📋 复制纯关键词")
+buttons = button1
 if any(word_remarks[w] for w in plain_keywords):
-    copy_button(display_text, "📝 复制含备注版本")
+    button2 = make_button(display_text, "📝 复制含备注")
+    buttons += button2
+
+# 整行布局：标题在左，按钮在右
+header_line = f"""
+<div style="display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px 0;">
+    <div style="font-size: 22px; font-weight: 600; color: #333;">
+        📋 共 {len(plain_keywords)} 个否定词
+    </div>
+    <div style="display: flex; align-items: center;">
+        {buttons}
+    </div>
+</div>
+"""
+
+components.html(header_line, height=60)
 
 # ---- 关键词列表 ----
 st.code(display_text, language="")
