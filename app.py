@@ -7,7 +7,7 @@ import re
 # ========== 配置页面 ==========
 st.set_page_config(page_title="亚马逊否定词查询", page_icon="📱", layout="wide")
 st.title("📱 手机线广告否定词查询")
-st.caption("数据来源：苹果机型否词 & 安卓机型否词")
+st.caption("数据来源：苹果机型否定 & 安卓机型否定")
 
 # ========== 读取 Excel ==========
 EXCEL_PATH = Path(__file__).parent / "手机线否词 (1).xlsx"
@@ -15,8 +15,8 @@ EXCEL_PATH = Path(__file__).parent / "手机线否词 (1).xlsx"
 @st.cache_data(show_spinner=False)
 def load_data(path):
     # 同时读取两个 sheet
-    df_apple = pd.read_excel(path, sheet_name="苹果机型否词", header=0)
-    df_android = pd.read_excel(path, sheet_name="安卓机型否词", header=0)
+    df_apple = pd.read_excel(path, sheet_name="苹果机型否定", header=0)
+    df_android = pd.read_excel(path, sheet_name="安卓机型否定", header=0)
     return df_apple, df_android
 
 try:
